@@ -1,0 +1,8 @@
+.*
+!.gitignore
+!.gitkeep
+*.log
+*.pdf
+Reports/*.csv
+Reports/*.json
+Reports/*.md

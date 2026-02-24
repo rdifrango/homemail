@@ -1,0 +1,10 @@
+*.lock
+*.log
+.*
+.gitignore
+.gitkeep
+.git
+.claude
+.env
+.ocpw
+.sync_journal.db*
