@@ -1,9 +1,13 @@
 # HomeMail
 
-Automated mail scanning pipeline for Raspberry Pi 5. Receives scanned PDFs from
-an Epson RR-600W via Samba, splits multi-document scans at blank pages, uses
-Claude AI to classify and rename documents, applies OCR where needed, and syncs
-everything to OwnCloud.
+AI-powered mail scanning and organization pipeline.
+
+Leave a scanner by your mail pile, feed in your documents, and walk away. It
+automatically splits, names, and organizes everything, then gives you a dashboard
+summarizing what needs your attention — with the original PDFs a click away.
+
+Works with any scanner that uploads to a Samba share. Uses Claude AI for
+classification and includes a web portal for reviewing everything.
 
 ```
 Epson RR-600W ──SMB──▶ RPi5 /opt/homemail/Raw/
