@@ -1,0 +1,126 @@
+# ============================================================
+# HomeMail Pipeline — Configuration
+# ============================================================
+#
+# Three-layer load order:
+#   1. Built-in defaults (hardcoded in pipeline.py)
+#   2. This config file (overrides defaults)
+#   3. CLI arguments (override everything)
+#
+# Delete or comment out any setting to fall back to the built-in default.
+# This file is never overwritten by the installer — your edits are safe.
+# ============================================================
+
+[folders]
+bronze   = "/opt/homemail/Raw"
+silver   = "/opt/homemail/Organized"
+tracking = "/opt/homemail/Reports"
+
+[processing]
+poll_interval  = 15
+ocr_if_needed  = true
+verify_copies  = true
+
+[ai]
+enabled = true
+
+[blank_detection]
+threshold       = 0.98
+min_text_length = 10
+
+# ============================================================
+# Categories
+# ============================================================
+#
+# Uncomment the [categories] section below to REPLACE the built-in
+# category list entirely. Every category you define must have both
+# a "label" and a "description".
+#
+# The AI classifies each document into one of these categories.
+# The "label" appears in the filename: YYYY-MM-DD_Label_Sender_DocType.pdf
+#
+# Example — uncomment and customize:
+#
+# [categories.bill]
+# label       = "Bill"
+# description = "Any bill, invoice, or payment request that needs to be paid"
+#
+# [categories.financial_statement]
+# label       = "Financial-Statement"
+# description = "Bank statements, credit card statements, investment account statements"
+#
+# [categories.financial_tax]
+# label       = "Tax"
+# description = "W-2s, 1099s, tax returns, IRS letters, charitable donation receipts"
+#
+# [categories.financial_insurance]
+# label       = "Insurance"
+# description = "Insurance policies, EOBs, claims, coverage letters (health, auto, home, life)"
+#
+# [categories.financial_retirement]
+# label       = "Retirement"
+# description = "401k, IRA, brokerage statements, pension, Social Security"
+#
+# [categories.housing]
+# label       = "Housing"
+# description = "Mortgage statements, HOA, property tax, home warranty, deed, title"
+#
+# [categories.utility]
+# label       = "Utility"
+# description = "Electric, gas, water, sewer, internet, phone, cable, trash (non-bill correspondence)"
+#
+# [categories.vehicle]
+# label       = "Vehicle"
+# description = "Auto loan, registration, title, DMV, toll, parking, repair records"
+#
+# [categories.medical]
+# label       = "Medical"
+# description = "Medical records, lab results, prescriptions, doctor letters, dental, vision (not bills)"
+#
+# [categories.legal]
+# label       = "Legal"
+# description = "Contracts, court documents, attorney letters, power of attorney, wills, trusts"
+#
+# [categories.kids_school]
+# label       = "Kids-School"
+# description = "Report cards, enrollment, school letters, permission slips, transcripts"
+#
+# [categories.kids_medical]
+# label       = "Kids-Medical"
+# description = "Pediatrician records, immunizations, dental, prescriptions for children"
+#
+# [categories.kids_activity]
+# label       = "Kids-Activity"
+# description = "Sports registrations, camp, extracurriculars, lessons, memberships"
+#
+# [categories.kids_other]
+# label       = "Kids-Other"
+# description = "Other kid-related documents that don't fit school, medical, or activities"
+#
+# [categories.government]
+# label       = "Government"
+# description = "Voter registration, jury duty, census, municipal notices, permits, licenses"
+#
+# [categories.employment]
+# label       = "Employment"
+# description = "Pay stubs, offer letters, benefits enrollment, HR correspondence"
+#
+# [categories.identity]
+# label       = "Identity"
+# description = "Passport, birth certificate, Social Security card, name change, citizenship"
+#
+# [categories.correspondence]
+# label       = "Correspondence"
+# description = "Personal letters, greeting cards, invitations, announcements"
+#
+# [categories.subscription]
+# label       = "Subscription"
+# description = "Magazine subscriptions, club memberships, loyalty programs, donations"
+#
+# [categories.junk]
+# label       = "Junk"
+# description = "Junk mail, advertisements, pre-approved offers, catalogs, coupons"
+#
+# [categories.unsorted]
+# label       = "Unsorted"
+# description = "Documents that don't clearly fit any other category"

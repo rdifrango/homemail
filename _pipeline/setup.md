@@ -119,18 +119,20 @@ scp TODO.html dietpi@PI_IP:/opt/homemail/
 chmod +x /opt/homemail/mail_pipeline.py
 ```
 
-### Update paths in the script
+### Customize settings
 
-Edit the CONFIG block near the top of `mail_pipeline.py`:
+Edit `_pipeline/config.toml` to change folders, thresholds, or categories.
+The defaults match a standard `/opt/homemail` install so no changes are needed
+unless your paths differ:
 
-```python
-CONFIG = {
-    "bronze_folder": "/opt/homemail/Raw",
-    "silver_folder": "/opt/homemail/Organized",
-    "tracking_folder": "/opt/homemail/Reports",
-    # ... rest stays the same
-}
+```toml
+[folders]
+bronze   = "/opt/homemail/Raw"
+silver   = "/opt/homemail/Organized"
+tracking = "/opt/homemail/Reports"
 ```
+
+Settings load in three layers (last wins): built-in defaults -> `config.toml` -> CLI arguments. The installer never overwrites `config.toml`, so your edits are safe across upgrades.
 
 ### Quick test
 
