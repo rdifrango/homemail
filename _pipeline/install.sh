@@ -121,11 +121,15 @@ echo ""
 echo "[4/7] Installing dependencies..."
 
 apt-get update -qq
-apt-get install -y -qq samba tesseract-ocr python3-pip > /dev/null
+apt-get install -y -qq samba tesseract-ocr > /dev/null
 
-pip install --break-system-packages -q pymupdf anthropic Pillow pytesseract 2>/dev/null
+# Install uv (fast Python package manager) system-wide
+if ! command -v uv &>/dev/null; then
+    echo "  Installing uv..."
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+fi
 
-echo "  Installed: samba, tesseract-ocr, pymupdf, anthropic, Pillow, pytesseract"
+echo "  Installed: samba, tesseract-ocr, uv"
 
 # Install Claude Code for the homemail user
 if [ ! -f "${INSTALL_DIR}/.local/bin/claude" ]; then
@@ -138,7 +142,8 @@ else
 fi
 
 # Verify
-python3 -c "import fitz; print(f'  PyMuPDF {fitz.version[0]}')"
+uv_ver=$(uv --version 2>&1)
+echo "  ${uv_ver}"
 tesseract_ver=$(tesseract --version 2>&1 | head -1)
 echo "  ${tesseract_ver}"
 
@@ -196,7 +201,7 @@ Type=simple
 User=${SERVICE_USER}
 Group=${SERVICE_USER}
 WorkingDirectory=${PIPELINE_DIR}
-ExecStart=/usr/bin/python3 ${PIPELINE_DIR}/pipeline.py
+ExecStart=/usr/local/bin/uv run ${PIPELINE_DIR}/pipeline.py
 Restart=on-failure
 RestartSec=30
 EnvironmentFile=${PIPELINE_DIR}/.env
