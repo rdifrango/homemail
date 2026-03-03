@@ -69,6 +69,60 @@ After install, complete these steps:
    http://<PI_IP>:8080/Reports/
    ```
 
+## Docker Quick Start
+
+Run on any machine with Docker Desktop, Podman, or Rancher Desktop — no host-level
+dependencies to install.
+
+```bash
+git clone git@github.com:rbrenton/homemail.git
+cd homemail
+
+# Create data directory and set your API key
+mkdir -p ~/homemail/Raw ~/homemail/Organized ~/homemail/Reports
+echo "ANTHROPIC_API_KEY=sk-ant-..." > ~/homemail/.env
+
+# Build and start
+make docker-up          # or: docker compose up -d --build
+```
+
+Dashboard at `http://localhost:8080/Reports/`
+
+The container bind-mounts `~/homemail/Raw/`, `~/homemail/Organized/`, and
+`~/homemail/Reports/` from the host, so all data stays outside the repo. Drop PDFs
+into `~/homemail/Raw/` and the pipeline picks them up automatically.
+
+To customize settings, copy `_pipeline/config.toml` and uncomment the volume mount
+in `docker/docker-compose.yml`:
+
+```yaml
+- ~/homemail/my-config.toml:/opt/homemail/_pipeline/config.toml:ro
+```
+
+### Auto-start on boot
+
+| Runtime | Auto-start |
+|---------|------------|
+| Docker Desktop | Enable "Start Docker Desktop when you sign in" in settings |
+| Podman Desktop | Enable "Start Podman Desktop on login" in preferences |
+| Rancher Desktop | Enable "Start at login" in preferences |
+| Linux dockerd | Enabled by default (`systemctl enable docker`) |
+
+The container uses `restart: unless-stopped`, so it starts automatically whenever
+the container runtime is running.
+
+### Podman compatibility
+
+`podman compose` works natively — no changes needed. If using Podman 4.7+, the
+`docker compose` V2 syntax is also supported via the podman-docker compatibility
+package.
+
+### Bind mount ownership (Linux)
+
+On Linux, files created by the container are owned by root on the host. If you need
+a specific UID/GID, run the container with `--user $(id -u):$(id -g)` or add
+`user: "1000:1000"` to `docker/docker-compose.yml`.
+
 ## Configuration
 
 Settings live in `_pipeline/config.toml`. The installer creates this file on first install and **never overwrites it** — your edits are safe across upgrades.
@@ -146,13 +200,21 @@ make logs         # Tail live journal logs
 make batch        # One-shot batch processing
 make sync         # Run OwnCloud sync manually
 make test-smb     # Verify Samba share is accessible
+make docker-build # Build the Docker image
+make docker-up    # Start the container (builds if needed)
+make docker-down  # Stop and remove the container
+make docker-logs  # Tail container logs
 ```
 
 ## Dependencies
 
-**System:** Python 3.11+, Tesseract OCR, Samba, [uv](https://docs.astral.sh/uv/)
+**Docker:** Just Docker Desktop, Podman, or Rancher Desktop. All other deps are
+included in the container image.
 
-**Python:** pymupdf, anthropic, Pillow, pytesseract (declared inline via PEP 723 — `uv run` installs them automatically)
+**Bare-metal (RPi):**
+
+- **System:** Python 3.11+, Tesseract OCR, Samba, [uv](https://docs.astral.sh/uv/)
+- **Python:** pymupdf, anthropic, Pillow, pytesseract (declared inline via PEP 723 — `uv run` installs them automatically)
 
 Install system deps manually with:
 ```bash
