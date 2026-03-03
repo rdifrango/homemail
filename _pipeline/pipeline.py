@@ -1,4 +1,13 @@
 #!/usr/bin/python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pymupdf",
+#     "anthropic",
+#     "Pillow",
+#     "pytesseract",
+# ]
+# ///
 """
 Mail Scanner Pipeline v2 — Raw / Organized Architecture
 ========================================================
@@ -12,19 +21,15 @@ Raw layer:       Scans exactly as they came from the scanner. READ-ONLY.
 Organized layer: AI-organized copies in a single flat folder. Category, sender,
                  and doc type are encoded in the filename for easy sorting/searching.
 
-Requirements:
-    pip install pymupdf anthropic
-
-Optional (for OCR fallback if scanner doesn't produce searchable PDFs):
-    pip install Pillow pytesseract
+Dependencies are declared inline (PEP 723) — uv handles them automatically.
 
 Usage:
-    python mail_pipeline.py                         # Watch mode + dashboard on :8080
-    python mail_pipeline.py --batch                 # Process existing and exit
-    python mail_pipeline.py --no-ai                 # Skip AI, use date-based names
-    python mail_pipeline.py --port 9090             # Custom dashboard port
-    python mail_pipeline.py --port 0                # Disable dashboard
-    python mail_pipeline.py -v                      # Verbose logging
+    uv run pipeline.py                              # Watch mode + dashboard on :8080
+    uv run pipeline.py --batch                      # Process existing and exit
+    uv run pipeline.py --no-ai                      # Skip AI, use date-based names
+    uv run pipeline.py --port 9090                  # Custom dashboard port
+    uv run pipeline.py --port 0                     # Disable dashboard
+    uv run pipeline.py -v                           # Verbose logging
 """
 
 import os
@@ -1075,7 +1080,7 @@ def main():
 
     if not HAS_ANTHROPIC:
         logging.warning("anthropic package not installed — AI disabled")
-        logging.warning("  Install with: pip install anthropic")
+        logging.warning("  Run with: uv run pipeline.py (deps install automatically)")
         CONFIG["use_ai_renaming"] = False
     elif not os.environ.get("ANTHROPIC_API_KEY"):
         logging.warning("ANTHROPIC_API_KEY not set — AI disabled (all files will be named 'Unsorted')")

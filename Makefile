@@ -28,7 +28,7 @@ logs: ## Tail live journal logs
 	journalctl -u $(SERVICE) -f
 
 batch: ## One-shot batch processing of existing files
-	python3 $(PIPELINE_DIR)/pipeline.py --batch -v
+	uv run $(PIPELINE_DIR)/pipeline.py --batch -v
 
 sync: ## Run OwnCloud sync manually
 	bash $(PIPELINE_DIR)/sync.sh

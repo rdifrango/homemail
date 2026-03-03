@@ -91,14 +91,18 @@ In the scanner's web interface (http://SCANNER_IP):
 ## 3. Install pipeline dependencies
 
 ```bash
-sudo apt install -y python3-pip tesseract-ocr
+sudo apt install -y tesseract-ocr
 
-pip install pymupdf anthropic Pillow pytesseract --break-system-packages
+# Install uv (fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 ```
 
-Verify Tesseract:
+Python dependencies are declared inline in `pipeline.py` (PEP 723) — `uv run` installs them automatically on first run.
+
+Verify:
 
 ```bash
+uv --version
 tesseract --version
 ```
 
@@ -133,7 +137,7 @@ CONFIG = {
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-your-key-here"
 cd /opt/homemail
-python3 mail_pipeline.py --batch -v
+uv run _pipeline/pipeline.py --batch -v
 ```
 
 ---
@@ -154,7 +158,7 @@ Type=simple
 User=dietpi
 Group=dietpi
 WorkingDirectory=/opt/homemail
-ExecStart=/usr/bin/python3 /opt/homemail/mail_pipeline.py
+ExecStart=/usr/local/bin/uv run /opt/homemail/_pipeline/pipeline.py
 Restart=on-failure
 RestartSec=30
 
