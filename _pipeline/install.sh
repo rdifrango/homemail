@@ -96,6 +96,16 @@ for f in pipeline.py setup.md; do
     fi
 done
 
+# Deploy config.toml with no-overwrite semantics (preserve user customizations)
+if [ -f "${SCRIPT_DIR}/config.toml" ]; then
+    if [ ! -f "${PIPELINE_DIR}/config.toml" ]; then
+        cp "${SCRIPT_DIR}/config.toml" "${PIPELINE_DIR}/"
+        echo "  Copied config.toml → _pipeline/"
+    else
+        echo "  config.toml already exists — not overwriting"
+    fi
+fi
+
 # Dashboard goes in Reports/
 if [ -f "${SCRIPT_DIR}/index.html" ]; then
     cp "${SCRIPT_DIR}/index.html" "${INSTALL_DIR}/Reports/"

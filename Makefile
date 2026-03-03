@@ -1,4 +1,4 @@
-.PHONY: install start stop restart status logs batch sync test-smb help
+.PHONY: install start stop restart status logs batch sync test-smb docker-build docker-up docker-down docker-logs help
 
 PIPELINE_DIR := /opt/homemail/_pipeline
 SERVICE      := homemail
@@ -36,3 +36,15 @@ sync: ## Run OwnCloud sync manually
 test-smb: ## Verify Samba share is accessible
 	@echo "Testing SMB share on localhost..."
 	smbclient //localhost/HomeMail -U scanner -c "ls" && echo "OK" || echo "FAILED"
+
+docker-build: ## Build the Docker image
+	docker compose -f docker/docker-compose.yml build
+
+docker-up: ## Start the container (builds if needed)
+	docker compose -f docker/docker-compose.yml up -d --build
+
+docker-down: ## Stop and remove the container
+	docker compose -f docker/docker-compose.yml down
+
+docker-logs: ## Tail container logs
+	docker compose -f docker/docker-compose.yml logs -f

@@ -27,6 +27,7 @@ Usage:
     uv run pipeline.py                              # Watch mode + dashboard on :8080
     uv run pipeline.py --batch                      # Process existing and exit
     uv run pipeline.py --no-ai                      # Skip AI, use date-based names
+    uv run pipeline.py --config /path/to/config.toml  # Custom config file
     uv run pipeline.py --port 9090                  # Custom dashboard port
     uv run pipeline.py --port 0                     # Disable dashboard
     uv run pipeline.py -v                           # Verbose logging
@@ -40,6 +41,7 @@ import hashlib
 import argparse
 import logging
 import csv
+import tomllib
 import threading
 from http.server import SimpleHTTPRequestHandler
 from socketserver import TCPServer
@@ -190,6 +192,102 @@ CATEGORIES = {
         "description": "Documents that don't clearly fit any other category",
     },
 }
+
+
+# ============================================================
+# CONFIG FILE LOADING
+# ============================================================
+
+# Mapping from TOML keys to CONFIG dict keys
+_TOML_KEY_MAP = {
+    # [folders]
+    "folders.bronze":   "bronze_folder",
+    "folders.silver":   "silver_folder",
+    "folders.tracking": "tracking_folder",
+    # [processing]
+    "processing.poll_interval":  "poll_interval",
+    "processing.ocr_if_needed":  "ocr_if_needed",
+    "processing.verify_copies":  "verify_copies",
+    # [ai]
+    "ai.enabled": "use_ai_renaming",
+    # [blank_detection]
+    "blank_detection.threshold":       "blank_threshold",
+    "blank_detection.min_text_length": "blank_min_text_length",
+}
+
+
+def load_config(config_path: str) -> dict:
+    """Load CONFIG overrides from a TOML file.
+
+    Returns a dict of CONFIG keys to override (using the internal
+    key names, e.g. "bronze_folder", not the TOML key names).
+    Returns an empty dict if the file doesn't exist or can't be parsed.
+    """
+    path = Path(config_path)
+    if not path.is_file():
+        return {}
+
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except Exception as e:
+        logging.warning(f"Could not parse config file {config_path}: {e}")
+        return {}
+
+    overrides = {}
+    for toml_dotted, config_key in _TOML_KEY_MAP.items():
+        section, key = toml_dotted.split(".")
+        if section in data and key in data[section]:
+            overrides[config_key] = data[section][key]
+
+    return overrides
+
+
+def load_categories(config_path: str) -> Optional[dict]:
+    """Load custom CATEGORIES from a TOML file.
+
+    If a [categories] section is present, returns a full replacement dict
+    (only the categories defined in the file will be used). Entries missing
+    "label" or "description" are skipped with a warning.
+
+    Returns None if no [categories] section is present or the file doesn't exist.
+    """
+    path = Path(config_path)
+    if not path.is_file():
+        return None
+
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except Exception:
+        return None
+
+    if "categories" not in data:
+        return None
+
+    raw = data["categories"]
+    if not isinstance(raw, dict):
+        logging.warning("Config: [categories] must be a table of tables — ignoring")
+        return None
+
+    categories = {}
+    for key, entry in raw.items():
+        if not isinstance(entry, dict):
+            logging.warning(f"Config: categories.{key} is not a table — skipping")
+            continue
+        if "label" not in entry or "description" not in entry:
+            logging.warning(f"Config: categories.{key} missing 'label' or 'description' — skipping")
+            continue
+        categories[key] = {
+            "label": str(entry["label"]),
+            "description": str(entry["description"]),
+        }
+
+    if not categories:
+        logging.warning("Config: [categories] section is empty after validation — using built-in defaults")
+        return None
+
+    return categories
 
 
 # ============================================================
@@ -1044,11 +1142,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Mail Scanner Pipeline — Raw / Organized Architecture"
     )
+    parser.add_argument("--config", metavar="FILE",
+                        help="Path to config.toml (default: config.toml next to pipeline.py)")
     parser.add_argument("--bronze", metavar="FOLDER", help="Raw layer folder")
     parser.add_argument("--silver", metavar="FOLDER", help="Organized layer folder")
     parser.add_argument("--batch", action="store_true", help="Process existing files and exit")
     parser.add_argument("--no-ai", action="store_true", help="Disable AI classification")
-    parser.add_argument("--threshold", type=float, default=0.98,
+    parser.add_argument("--threshold", type=float, default=None,
                         help="Blank page threshold (0-1, default 0.98)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
     parser.add_argument("--port", type=int, default=8080,
@@ -1062,13 +1162,40 @@ def main():
         datefmt="%H:%M:%S",
     )
 
+    # --- Three-layer config merge ---
+    # Layer 1: hardcoded defaults (already in CONFIG / CATEGORIES dicts)
+
+    # Layer 2: config file
+    if args.config:
+        config_path = args.config
+    else:
+        config_path = str(Path(__file__).parent / "config.toml")
+
+    file_overrides = load_config(config_path)
+    if file_overrides:
+        CONFIG.update(file_overrides)
+        logging.info(f"Config: loaded {config_path}")
+    elif args.config:
+        # User explicitly specified a file — warn if it wasn't found/readable
+        logging.warning(f"Config: could not load {config_path} — using built-in defaults")
+    else:
+        logging.info("Config: using built-in defaults")
+
+    custom_categories = load_categories(config_path)
+    if custom_categories is not None:
+        CATEGORIES.clear()
+        CATEGORIES.update(custom_categories)
+        logging.info(f"Config: loaded {len(CATEGORIES)} custom categories")
+
+    # Layer 3: CLI overrides (only when explicitly provided)
     if args.bronze:
         CONFIG["bronze_folder"] = args.bronze
     if args.silver:
         CONFIG["silver_folder"] = args.silver
     if args.no_ai:
         CONFIG["use_ai_renaming"] = False
-    CONFIG["blank_threshold"] = args.threshold
+    if args.threshold is not None:
+        CONFIG["blank_threshold"] = args.threshold
 
     # Create folder structure
     os.makedirs(CONFIG["bronze_folder"], exist_ok=True)

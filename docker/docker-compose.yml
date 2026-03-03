@@ -1,0 +1,17 @@
+services:
+  homemail:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: homemail
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - ../_pipeline/.env
+    volumes:
+      - ${HOMEMAIL_DATA:-~/homemail}/Raw:/opt/homemail/Raw
+      - ${HOMEMAIL_DATA:-~/homemail}/Organized:/opt/homemail/Organized
+      - ${HOMEMAIL_DATA:-~/homemail}/Reports:/opt/homemail/Reports
+      # Optional: mount a custom config.toml (uncomment to use)
+      # - ${HOMEMAIL_DATA:-~/homemail}/my-config.toml:/opt/homemail/_pipeline/config.toml:ro

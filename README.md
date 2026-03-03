@@ -32,6 +32,7 @@ Epson RR-600W ──SMB──▶ RPi5 /opt/homemail/Raw/
 ├── Reports/          # TODO.md, document_index.csv, processing ledger, dashboard
 └── _pipeline/        # Application code, config, installer
     ├── pipeline.py   # Main processing engine
+    ├── config.toml   # User-editable settings (folders, thresholds, categories)
     ├── install.sh    # Automated installer
     ├── sync.sh       # OwnCloud sync script
     ├── setup.md      # Detailed manual setup guide
@@ -68,23 +69,131 @@ After install, complete these steps:
    http://<PI_IP>:8080/Reports/
    ```
 
+## Docker Quick Start
+
+Run on any machine with Docker Desktop, Podman, or Rancher Desktop — no host-level
+dependencies to install.
+
+```bash
+git clone git@github.com:rbrenton/homemail.git
+cd homemail
+
+# Create data directory
+mkdir -p ~/homemail/Raw ~/homemail/Organized ~/homemail/Reports
+
+# Set your API key
+echo "ANTHROPIC_API_KEY=sk-ant-..." > _pipeline/.env
+
+# Build and start
+make docker-up          # or: docker compose up -d --build
+```
+
+Dashboard at `http://localhost:8080/Reports/`
+
+The container bind-mounts `~/homemail/Raw/`, `~/homemail/Organized/`, and
+`~/homemail/Reports/` from the host, so all data stays outside the repo. Drop PDFs
+into `~/homemail/Raw/` and the pipeline picks them up automatically.
+
+To store data elsewhere, set `HOMEMAIL_DATA` before starting:
+
+```bash
+HOMEMAIL_DATA=/mnt/nas/homemail make docker-up
+```
+
+To customize settings, copy `_pipeline/config.toml` and uncomment the volume mount
+in `docker/docker-compose.yml`:
+
+```yaml
+- ~/homemail/my-config.toml:/opt/homemail/_pipeline/config.toml:ro
+```
+
+### Auto-start on boot
+
+| Runtime | Auto-start |
+|---------|------------|
+| Docker Desktop | Enable "Start Docker Desktop when you sign in" in settings |
+| Podman Desktop | Enable "Start Podman Desktop on login" in preferences |
+| Rancher Desktop | Enable "Start at login" in preferences |
+| Linux dockerd | Enabled by default (`systemctl enable docker`) |
+
+The container uses `restart: unless-stopped`, so it starts automatically whenever
+the container runtime is running.
+
+### Podman compatibility
+
+`podman compose` works natively — no changes needed. If using Podman 4.7+, the
+`docker compose` V2 syntax is also supported via the podman-docker compatibility
+package.
+
+### Bind mount ownership (Linux)
+
+On Linux, files created by the container are owned by root on the host. If you need
+a specific UID/GID, run the container with `--user $(id -u):$(id -g)` or add
+`user: "1000:1000"` to `docker/docker-compose.yml`.
+
+## Configuration
+
+Settings live in `_pipeline/config.toml`. The installer creates this file on first install and **never overwrites it** — your edits are safe across upgrades.
+
+Settings are loaded in three layers (last wins):
+
+1. **Built-in defaults** (hardcoded in `pipeline.py`)
+2. **config.toml** (overrides defaults)
+3. **CLI arguments** (override everything)
+
+```toml
+# _pipeline/config.toml
+
+[folders]
+bronze   = "/opt/homemail/Raw"
+silver   = "/opt/homemail/Organized"
+tracking = "/opt/homemail/Reports"
+
+[processing]
+poll_interval  = 15       # seconds between folder scans
+ocr_if_needed  = true
+verify_copies  = true
+
+[ai]
+enabled = true
+
+[blank_detection]
+threshold       = 0.98    # 0-1, higher = more lenient
+min_text_length = 10
+```
+
+To customize categories, uncomment the `[categories.*]` sections in the file. When present, they **fully replace** the built-in list — only the categories you define will be used:
+
+```toml
+[categories.bill]
+label       = "Bill"
+description = "Any bill, invoice, or payment request"
+
+[categories.medical]
+label       = "Medical"
+description = "Medical records, lab results, prescriptions"
+```
+
 ## Usage
 
 ```bash
 # Watch mode (default) — polls for new scans every 15s
-python3 _pipeline/pipeline.py
+uv run _pipeline/pipeline.py
 
-# Process existing files and exit
-python3 _pipeline/pipeline.py --batch
+# Process existing files and exit (or: make batch)
+uv run _pipeline/pipeline.py --batch
 
 # Skip AI classification (date-based filenames only)
-python3 _pipeline/pipeline.py --no-ai
+uv run _pipeline/pipeline.py --no-ai
+
+# Use a custom config file
+uv run _pipeline/pipeline.py --config /path/to/config.toml
 
 # Custom dashboard port (0 to disable)
-python3 _pipeline/pipeline.py --port 9090
+uv run _pipeline/pipeline.py --port 9090
 
 # Verbose logging
-python3 _pipeline/pipeline.py -v
+uv run _pipeline/pipeline.py -v
 ```
 
 ## Make Targets
@@ -99,18 +208,26 @@ make logs         # Tail live journal logs
 make batch        # One-shot batch processing
 make sync         # Run OwnCloud sync manually
 make test-smb     # Verify Samba share is accessible
+make docker-build # Build the Docker image
+make docker-up    # Start the container (builds if needed)
+make docker-down  # Stop and remove the container
+make docker-logs  # Tail container logs
 ```
 
 ## Dependencies
 
-**System:** Python 3.7+, Tesseract OCR, Samba
+**Docker:** Just Docker Desktop, Podman, or Rancher Desktop. All other deps are
+included in the container image.
 
-**Python:** pymupdf, anthropic, Pillow, pytesseract
+**Bare-metal (RPi):**
 
-Install manually with:
+- **System:** Python 3.11+, Tesseract OCR, Samba, [uv](https://docs.astral.sh/uv/)
+- **Python:** pymupdf, anthropic, Pillow, pytesseract (declared inline via PEP 723 — `uv run` installs them automatically)
+
+Install system deps manually with:
 ```bash
-sudo apt install -y samba tesseract-ocr python3-pip
-pip install pymupdf anthropic Pillow pytesseract --break-system-packages
+sudo apt install -y samba tesseract-ocr
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ## Service Management
