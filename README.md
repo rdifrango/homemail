@@ -78,9 +78,11 @@ dependencies to install.
 git clone git@github.com:rbrenton/homemail.git
 cd homemail
 
-# Create data directory and set your API key
+# Create data directory
 mkdir -p ~/homemail/Raw ~/homemail/Organized ~/homemail/Reports
-echo "ANTHROPIC_API_KEY=sk-ant-..." > ~/homemail/.env
+
+# Set your API key
+echo "ANTHROPIC_API_KEY=sk-ant-..." > _pipeline/.env
 
 # Build and start
 make docker-up          # or: docker compose up -d --build

@@ -8,7 +8,7 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - ${HOMEMAIL_DATA:-~/homemail}/.env
+      - ../_pipeline/.env
     volumes:
       - ${HOMEMAIL_DATA:-~/homemail}/Raw:/opt/homemail/Raw
       - ${HOMEMAIL_DATA:-~/homemail}/Organized:/opt/homemail/Organized
