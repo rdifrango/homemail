@@ -92,6 +92,12 @@ The container bind-mounts `~/homemail/Raw/`, `~/homemail/Organized/`, and
 `~/homemail/Reports/` from the host, so all data stays outside the repo. Drop PDFs
 into `~/homemail/Raw/` and the pipeline picks them up automatically.
 
+To store data elsewhere, set `HOMEMAIL_DATA` before starting:
+
+```bash
+HOMEMAIL_DATA=/mnt/nas/homemail make docker-up
+```
+
 To customize settings, copy `_pipeline/config.toml` and uncomment the volume mount
 in `docker/docker-compose.yml`:
 

@@ -4,7 +4,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir pymupdf anthropic Pillow pytesseract
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+COPY _pipeline/pipeline.py /tmp/
+RUN uv run --script /tmp/pipeline.py --help > /dev/null && rm /tmp/pipeline.py
 
 WORKDIR /opt/homemail
 

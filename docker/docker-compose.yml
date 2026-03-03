@@ -8,10 +8,10 @@ services:
     ports:
       - "8080:8080"
     env_file:
-      - ~/homemail/.env
+      - ${HOMEMAIL_DATA:-~/homemail}/.env
     volumes:
-      - ~/homemail/Raw:/opt/homemail/Raw
-      - ~/homemail/Organized:/opt/homemail/Organized
-      - ~/homemail/Reports:/opt/homemail/Reports
+      - ${HOMEMAIL_DATA:-~/homemail}/Raw:/opt/homemail/Raw
+      - ${HOMEMAIL_DATA:-~/homemail}/Organized:/opt/homemail/Organized
+      - ${HOMEMAIL_DATA:-~/homemail}/Reports:/opt/homemail/Reports
       # Optional: mount a custom config.toml (uncomment to use)
-      # - ~/homemail/my-config.toml:/opt/homemail/_pipeline/config.toml:ro
+      # - ${HOMEMAIL_DATA:-~/homemail}/my-config.toml:/opt/homemail/_pipeline/config.toml:ro
