@@ -156,6 +156,7 @@ verify_copies  = true
 
 [ai]
 enabled = true
+split_method = "auto"   # "auto", "ai", or "blank"
 
 [blank_detection]
 threshold       = 0.98    # 0-1, higher = more lenient
@@ -174,6 +175,30 @@ label       = "Medical"
 description = "Medical records, lab results, prescriptions"
 ```
 
+## Document Splitting
+
+When you scan a batch of mail, the pipeline needs to figure out where one piece of
+mail ends and the next begins. There are two methods, controlled by `ai.split_method`
+in `config.toml` (or `--split-method` on the CLI):
+
+| Method | How it works |
+|--------|--------------|
+| **auto** (default) | Sends page thumbnails to Claude Haiku for AI boundary detection, falls back to blank-page splitting if AI is unavailable |
+| **ai** | AI only — fails if AI is unavailable |
+| **blank** | Original behavior — requires a blank separator sheet between each piece of mail |
+
+**AI splitting** analyzes the actual content of each page — letterheads, dates,
+reference numbers, sender addresses — to detect where documents change. This means
+you can feed a stack of mail straight into the scanner without inserting blank pages
+between them.
+
+**Blank-page splitting** looks for physical sheets where both sides are blank (the
+separator pages you insert between mail pieces). Single blank backsides are ignored,
+not treated as separators.
+
+`--no-ai` disables both AI splitting and AI classification. To keep AI classification
+but force blank-page splitting, use `--split-method blank`.
+
 ## Usage
 
 ```bash
@@ -185,6 +210,9 @@ uv run _pipeline/pipeline.py --batch
 
 # Skip AI classification (date-based filenames only)
 uv run _pipeline/pipeline.py --no-ai
+
+# Force blank-page splitting only (no AI boundary detection)
+uv run _pipeline/pipeline.py --split-method blank
 
 # Use a custom config file
 uv run _pipeline/pipeline.py --config /path/to/config.toml
