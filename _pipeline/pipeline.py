@@ -27,6 +27,7 @@ Usage:
     uv run pipeline.py                              # Watch mode + dashboard on :8080
     uv run pipeline.py --batch                      # Process existing and exit
     uv run pipeline.py --no-ai                      # Skip AI, use date-based names
+    uv run pipeline.py --split-method blank          # Force blank-page splitting only
     uv run pipeline.py --config /path/to/config.toml  # Custom config file
     uv run pipeline.py --port 9090                  # Custom dashboard port
     uv run pipeline.py --port 0                     # Disable dashboard
@@ -41,6 +42,7 @@ import hashlib
 import argparse
 import logging
 import csv
+import base64
 import tomllib
 import threading
 from http.server import SimpleHTTPRequestHandler
@@ -92,6 +94,7 @@ CONFIG = {
 
     # ---- AI Settings ----
     "use_ai_renaming": True,
+    "split_method": "auto",     # "auto" (AI → blank fallback), "ai", or "blank"
 
     # ---- Processing ----
     "poll_interval": 15,        # seconds between folder scans
@@ -210,6 +213,7 @@ _TOML_KEY_MAP = {
     "processing.verify_copies":  "verify_copies",
     # [ai]
     "ai.enabled": "use_ai_renaming",
+    "ai.split_method": "split_method",
     # [blank_detection]
     "blank_detection.threshold":       "blank_threshold",
     "blank_detection.min_text_length": "blank_min_text_length",
@@ -459,6 +463,198 @@ def split_pdf_at_blanks(input_path: str) -> list[tuple[bytes, list[int]]]:
 
     doc.close()
     return results
+
+
+def ai_split_pdf(input_path: str) -> Optional[list[tuple[bytes, list[int]]]]:
+    """
+    Use Claude to detect document boundaries by analyzing page thumbnails.
+
+    Sends low-res thumbnails of each page to Claude Haiku, which identifies
+    where one document ends and another begins (e.g. different letterheads,
+    new addresses, envelope vs. letter transitions).
+
+    Returns list of (pdf_bytes, page_indices) tuples — same format as
+    split_pdf_at_blanks(). Returns None on failure so the caller can
+    fall back to blank-page splitting.
+    """
+    if not HAS_ANTHROPIC:
+        logging.debug("  AI split skip: anthropic package not installed")
+        return None
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        logging.debug("  AI split skip: ANTHROPIC_API_KEY not set")
+        return None
+
+    doc = fitz.open(input_path)
+    total_pages = len(doc)
+
+    if total_pages == 0:
+        doc.close()
+        return None
+
+    logging.info(f"  AI split: analyzing {total_pages} pages for document boundaries...")
+
+    # Render each page as a low-res thumbnail and encode as base64 JPEG
+    page_images = []
+    for i in range(total_pages):
+        page = doc[i]
+        # Low resolution (72 DPI) for fast, cheap boundary detection
+        pix = page.get_pixmap(dpi=72)
+        img_bytes = pix.tobytes("jpeg")
+        b64 = base64.standard_b64encode(img_bytes).decode("ascii")
+        page_images.append(b64)
+
+    try:
+        if not hasattr(ai_split_pdf, "_client"):
+            ai_split_pdf._client = anthropic.Anthropic(api_key=api_key)
+        client = ai_split_pdf._client
+
+        # Build the content blocks: instructions + interleaved page images
+        content = []
+        content.append({
+            "type": "text",
+            "text": (
+                f"You are analyzing {total_pages} scanned pages from a batch of "
+                f"physical mail. These pages were scanned on a duplex scanner, so "
+                f"pages come in pairs (front/back of each sheet): pages 1-2 are "
+                f"sheet 1, pages 3-4 are sheet 2, etc.\n\n"
+                f"Your job is to identify which pages belong to the SAME document "
+                f"(e.g. a multi-page letter) versus where one piece of mail ends "
+                f"and a new one begins.\n\n"
+                f"IMPORTANT: Two pages from the SAME sender do NOT automatically "
+                f"belong together. Read the actual content carefully:\n"
+                f"- Different dates, reference numbers, account numbers, or "
+                f"  recipient names mean SEPARATE documents even from the same sender\n"
+                f"- Pharmacy receipts, bank statements, and similar items are often "
+                f"  multiple separate documents from the same company — split them "
+                f"  by date, Rx number, account number, or transaction\n"
+                f"- A single physical page may contain multiple documents printed "
+                f"  on it (e.g. two pharmacy labels on one page) — if so, keep "
+                f"  that page as one unit but note it is distinct from other pages\n\n"
+                f"Other clues:\n"
+                f"- Different letterheads, logos, or sender addresses\n"
+                f"- Envelope fronts/backs (indicate start of new mail piece)\n"
+                f"- Page numbering (\"Page 2 of 3\" means it continues)\n"
+                f"- Blank backsides of single-sided letters (these belong to the "
+                f"  preceding document, not a new one)\n"
+                f"- Completely blank pages on both sides of a sheet = separator, "
+                f"  discard these\n\n"
+                f"Return ONLY a JSON array of arrays, where each inner array "
+                f"contains the 1-based page numbers belonging to one document. "
+                f"Omit completely blank separator pages.\n\n"
+                f"Example for 8 pages with 3 documents and a blank separator "
+                f"(sheet 3):\n"
+                f'[[1, 2], [3, 4], [7, 8]]\n\n'
+                f"Here are the {total_pages} pages:"
+            ),
+        })
+
+        for i, b64 in enumerate(page_images):
+            content.append({
+                "type": "text",
+                "text": f"Page {i + 1}:",
+            })
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": b64,
+                },
+            })
+
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            messages=[{"role": "user", "content": content}],
+        )
+
+        response_text = message.content[0].text.strip()
+        logging.debug(f"  AI split raw response: {repr(response_text)}")
+
+        # Extract the JSON array — handle markdown fences and trailing commentary
+        # Strategy: find the first '[' and parse from there using raw_decode
+        bracket_pos = response_text.find("[")
+        if bracket_pos == -1:
+            logging.warning("  AI split: no JSON array in response — falling back")
+            doc.close()
+            return None
+
+        decoder = json.JSONDecoder()
+        groups, _ = decoder.raw_decode(response_text, bracket_pos)
+        logging.debug(f"  AI split parsed: {groups}")
+
+        if not isinstance(groups, list) or not groups:
+            logging.warning("  AI split: unexpected response format — falling back")
+            doc.close()
+            return None
+
+        # Validate and convert 1-based page numbers to 0-based indices
+        results = []
+        for group in groups:
+            if not isinstance(group, list) or not group:
+                continue
+            page_indices = []
+            for page_num in group:
+                idx = int(page_num) - 1  # 1-based → 0-based
+                if 0 <= idx < total_pages:
+                    page_indices.append(idx)
+            if not page_indices:
+                continue
+
+            new_doc = fitz.open()
+            for page_idx in page_indices:
+                new_doc.insert_pdf(doc, from_page=page_idx, to_page=page_idx)
+            pdf_bytes = new_doc.tobytes()
+            new_doc.close()
+            results.append((pdf_bytes, page_indices))
+
+        doc.close()
+
+        if not results:
+            logging.warning("  AI split: no documents detected — falling back")
+            return None
+
+        logging.info(f"  AI split: detected {len(results)} document(s)")
+        return results
+
+    except Exception as e:
+        logging.warning(f"  AI split failed: {e} — falling back to blank-page detection")
+        doc.close()
+        return None
+
+
+def split_pdf(input_path: str) -> list[tuple[bytes, list[int]]]:
+    """
+    Split a multi-document PDF into individual documents.
+
+    Strategy depends on CONFIG["split_method"]:
+      - "auto" (default): try AI splitting first, fall back to blank-page detection
+      - "ai":   AI only — fail if AI is unavailable
+      - "blank": blank-page detection only (original behavior)
+    """
+    method = CONFIG.get("split_method", "auto")
+
+    if method == "blank":
+        return split_pdf_at_blanks(input_path)
+
+    if method in ("auto", "ai"):
+        if CONFIG.get("use_ai_renaming", True):
+            result = ai_split_pdf(input_path)
+            if result is not None:
+                return result
+
+        if method == "ai":
+            logging.warning("  AI split unavailable and split_method='ai' — no fallback")
+            return []
+
+        # method == "auto": fall back to blank-page detection
+        logging.info("  Falling back to blank-page detection...")
+        return split_pdf_at_blanks(input_path)
+
+    logging.warning(f"  Unknown split_method '{method}' — using blank-page detection")
+    return split_pdf_at_blanks(input_path)
 
 
 # ============================================================
@@ -853,7 +1049,7 @@ def process_bronze_file(bronze_path: str) -> list[DocumentRecord]:
     """
     Full pipeline for one raw scanned PDF:
     1. Hash the raw file (for dedup and verification)
-    2. Split at blank pages (in memory — Raw folder is read-only)
+    2. Split into individual documents (AI boundary detection → blank-page fallback)
     3. For each split document:
        a. Make searchable (OCR)
        b. AI classify + name
@@ -892,8 +1088,8 @@ def process_bronze_file(bronze_path: str) -> list[DocumentRecord]:
     logging.info(f"  Scan time: {extract_scan_datetime(os.path.basename(bronze_path))}")
     logging.info(f"{'=' * 65}")
 
-    # ---- Step 2: Split at blank pages (read-only — all in memory) ----
-    split_results = split_pdf_at_blanks(bronze_path)
+    # ---- Step 2: Split into individual documents (read-only — all in memory) ----
+    split_results = split_pdf(bronze_path)
 
     if not split_results:
         logging.warning("  No documents extracted — skipping")
@@ -1148,6 +1344,8 @@ def main():
     parser.add_argument("--silver", metavar="FOLDER", help="Organized layer folder")
     parser.add_argument("--batch", action="store_true", help="Process existing files and exit")
     parser.add_argument("--no-ai", action="store_true", help="Disable AI classification")
+    parser.add_argument("--split-method", choices=["auto", "ai", "blank"], default=None,
+                        help="Document splitting method: auto (AI with blank fallback), ai, blank (default: auto)")
     parser.add_argument("--threshold", type=float, default=None,
                         help="Blank page threshold (0-1, default 0.98)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")
@@ -1194,6 +1392,8 @@ def main():
         CONFIG["silver_folder"] = args.silver
     if args.no_ai:
         CONFIG["use_ai_renaming"] = False
+    if args.split_method is not None:
+        CONFIG["split_method"] = args.split_method
     if args.threshold is not None:
         CONFIG["blank_threshold"] = args.threshold
 

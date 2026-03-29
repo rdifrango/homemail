@@ -23,6 +23,11 @@ verify_copies  = true
 
 [ai]
 enabled = true
+# Document splitting method:
+#   "auto"  = try AI boundary detection first, fall back to blank-page splitting
+#   "ai"    = AI only (fails if AI unavailable)
+#   "blank" = blank-page detection only (original behavior, requires separator sheets)
+split_method = "auto"
 
 [blank_detection]
 threshold       = 0.98
