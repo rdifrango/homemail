@@ -27,7 +27,7 @@ Usage:
     uv run pipeline.py                              # Watch mode + dashboard on :8080
     uv run pipeline.py --batch                      # Process existing and exit
     uv run pipeline.py --no-ai                      # Skip AI, use date-based names
-    uv run pipeline.py --split-method blank          # Force blank-page splitting only
+    uv run pipeline.py --split-method auto           # AI splitting with blank-page fallback
     uv run pipeline.py --config /path/to/config.toml  # Custom config file
     uv run pipeline.py --port 9090                  # Custom dashboard port
     uv run pipeline.py --port 0                     # Disable dashboard
@@ -94,7 +94,7 @@ CONFIG = {
 
     # ---- AI Settings ----
     "use_ai_renaming": True,
-    "split_method": "auto",     # "auto" (AI → blank fallback), "ai", or "blank"
+    "split_method": "blank",    # "blank", "auto" (AI → blank fallback), or "ai"
 
     # ---- Processing ----
     "poll_interval": 15,        # seconds between folder scans
@@ -634,7 +634,7 @@ def split_pdf(input_path: str) -> list[tuple[bytes, list[int]]]:
       - "ai":   AI only — fail if AI is unavailable
       - "blank": blank-page detection only (original behavior)
     """
-    method = CONFIG.get("split_method", "auto")
+    method = CONFIG.get("split_method", "blank")
 
     if method == "blank":
         return split_pdf_at_blanks(input_path)
@@ -1345,7 +1345,7 @@ def main():
     parser.add_argument("--batch", action="store_true", help="Process existing files and exit")
     parser.add_argument("--no-ai", action="store_true", help="Disable AI classification")
     parser.add_argument("--split-method", choices=["auto", "ai", "blank"], default=None,
-                        help="Document splitting method: auto (AI with blank fallback), ai, blank (default: auto)")
+                        help="Document splitting method: blank (default), auto (AI with blank fallback), ai")
     parser.add_argument("--threshold", type=float, default=None,
                         help="Blank page threshold (0-1, default 0.98)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging")

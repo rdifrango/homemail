@@ -156,7 +156,7 @@ verify_copies  = true
 
 [ai]
 enabled = true
-split_method = "auto"   # "auto", "ai", or "blank"
+split_method = "blank"  # "blank", "auto", or "ai"
 
 [blank_detection]
 threshold       = 0.98    # 0-1, higher = more lenient
@@ -183,9 +183,9 @@ in `config.toml` (or `--split-method` on the CLI):
 
 | Method | How it works |
 |--------|--------------|
-| **auto** (default) | Sends page thumbnails to Claude Haiku for AI boundary detection, falls back to blank-page splitting if AI is unavailable |
+| **blank** (default) | Original behavior — requires a blank separator sheet between each piece of mail |
+| **auto** | Sends page thumbnails to Claude Haiku for AI boundary detection, falls back to blank-page splitting if AI is unavailable |
 | **ai** | AI only — fails if AI is unavailable |
-| **blank** | Original behavior — requires a blank separator sheet between each piece of mail |
 
 **AI splitting** analyzes the actual content of each page — letterheads, dates,
 reference numbers, sender addresses — to detect where documents change. This means
@@ -211,8 +211,8 @@ uv run _pipeline/pipeline.py --batch
 # Skip AI classification (date-based filenames only)
 uv run _pipeline/pipeline.py --no-ai
 
-# Force blank-page splitting only (no AI boundary detection)
-uv run _pipeline/pipeline.py --split-method blank
+# Enable AI boundary detection (with blank-page fallback)
+uv run _pipeline/pipeline.py --split-method auto
 
 # Use a custom config file
 uv run _pipeline/pipeline.py --config /path/to/config.toml
